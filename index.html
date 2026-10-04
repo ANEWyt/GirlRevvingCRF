@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Bike Rev Game</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #000;
+    font-family: Arial, sans-serif;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+  }
+
+  #game {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background: #000;
+  }
+
+  #videoFrame {
+    position: absolute;
+    z-index: 0;
+    top: 50%;
+    left: 50%;
+    width: min(80vw, 960px, calc(80vh * 4 / 3));
+    aspect-ratio: 4 / 3;
+    overflow: hidden;
+    background: #000;
+    transform: translate(-50%, -50%);
+  }
+
+  #videoFrame video {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    background: #000;
+    pointer-events: none;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  #startScreen {
+    position: absolute;
+    inset: 0;
+    z-index: 5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,0,0,.35);
+  }
+
+  #startBtn, #revBtn {
+    border: 0;
+    color: white;
+    font-weight: 800;
+    letter-spacing: 1px;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  #startBtn {
+    padding: 18px 42px;
+    border-radius: 14px;
+    font-size: 24px;
+    background: #16a34a;
+    box-shadow: 0 6px 25px rgba(0,0,0,.45);
+  }
+
+  #startBtn:active { transform: scale(.96); }
+
+  #controls {
+    position: absolute;
+    z-index: 10;
+    left: 0;
+    right: 0;
+    bottom: 28px;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+  }
+
+  #revBtn {
+    pointer-events: auto;
+    width: min(260px, 70vw);
+    height: 78px;
+    border-radius: 20px;
+    font-size: 25px;
+    background: #dc2626;
+    box-shadow: 0 7px 25px rgba(0,0,0,.5);
+  }
+
+  #revBtn.pressed {
+    background: #f59e0b;
+    transform: scale(.96);
+  }
+
+  #revBtn:disabled {
+    opacity: .45;
+    cursor: not-allowed;
+  }
+
+  #status {
+    position: absolute;
+    z-index: 9;
+    top: 14px;
+    left: 14px;
+    padding: 7px 10px;
+    color: white;
+    background: rgba(0,0,0,.55);
+    border-radius: 8px;
+    font: 12px monospace;
+    pointer-events: none;
+  }
+
+  #heatWarning {
+    position: absolute;
+    z-index: 11;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    color: #ff3030;
+    background: rgba(0, 0, 0, 0.16);
+    font: 900 48px/1.15 monospace;
+    text-align: center;
+    text-shadow: 0 3px 8px #000000, 0 0 22px rgba(255,0,0,.8);
+    pointer-events: none;
+  }
+
+  #heatWarning[hidden] { display: none; }
+
+  #heatWarningMessage.shake {
+    animation: heat-warning-shake 650ms ease-in-out 1;
+  }
+
+  #heatWarningMessage.soft-shake {
+    animation: heat-warning-soft-shake 800ms ease-in-out 1;
+  }
+
+  @keyframes heat-warning-shake {
+    0%, 100% { transform: translateX(0); }
+    15%, 45%, 75% { transform: translateX(-14px); }
+    30%, 60%, 90% { transform: translateX(14px); }
+  }
+
+  @keyframes heat-warning-soft-shake {
+    0%, 100% { transform: translateX(0); }
+    25%, 75% { transform: translateX(-5px); }
+    50% { transform: translateX(5px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    #heatWarningMessage.shake,
+    #heatWarningMessage.soft-shake { animation: none; }
+  }
+
+  #heatMeter {
+    position: absolute;
+    z-index: 9;
+    top: 14px;
+    left: auto;
+    right: 14px;
+    width: min(280px, calc(100% - 28px));
+    max-width: 280px;
+    color: #fff;
+    pointer-events: none;
+  }
+
+  #heatLabel {
+    margin-bottom: 5px;
+    font: 11px monospace;
+    text-align: center;
+    text-shadow: 0 1px 3px #000;
+  }
+
+  #heatTrack {
+    height: 20px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.65);
+    border-radius: 999px;
+    background: rgba(0,0,0,.6);
+  }
+
+  #heatFill {
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #22c55e, #eab308 70%, #ff0000);
+    transform: scaleX(0);
+    transform-origin: left center;
+    transition: transform .12s linear;
+  }
+
+  #rpmMeter {
+    position: absolute;
+    z-index: 9;
+    top: 59px;
+    left: auto;
+    right: 14px;
+    width: min(280px, calc(100% - 28px));
+    max-width: 280px;
+    color: #fff;
+    pointer-events: none;
+  }
+
+  #rpmHeader, #rpmScale {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    font-family: monospace;
+  }
+
+  #rpmHeader { margin-bottom: 3px; }
+
+  #rpmLabel {
+    color: rgba(255,255,255,.78);
+    font-size: 30px;
+    letter-spacing: .08em;
+  }
+
+  #rpmReadout {
+    color: #f8fafc;
+    font-size: 15px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    text-shadow: 0 1px 4px rgba(0,0,0,.9);
+  }
+
+  #rpmTrack {
+    position: relative;
+    height: 30px;
+    overflow: hidden;
+    border: 1px solid rgba(255,255,255,.65);
+    border-radius: 999px;
+    background: rgba(0,0,0,.65);
+  }
+
+  #rpmFill {
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #22d3ee, #a3e635 52%, #facc15 78%, #ef4444);
+    transform: scaleX(0);
+    transform-origin: left center;
+  }
+
+  #rpmTrack::after {
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(90deg, transparent 0 calc(8.333% - 1px), rgba(0,0,0,.55) calc(8.333% - 1px) 8.333%);
+    content: "";
+  }
+
+  #rpmScale {
+    margin-top: 2px;
+    color: rgba(255,255,255,.64);
+    font-size: 8px;
+  }
+</style>
+</head>
+<body>
+<div id="game">
+  <div id="videoFrame">
+    <video id="bikeVideo" preload="auto" playsinline draggable="false">
+      <source src="1000103691.mp4" type="video/mp4">
+      Your browser does not support HTML5 video.
+    </video>
+  </div>
+
+  <div id="startScreen">
+    <button id="startBtn">START</button>
+  </div>
+
+  <div id="status">READY</div>
+  <div id="heatWarning" role="alert" aria-live="assertive" hidden><span id="heatWarningMessage">Oh God..🥵<br> Please Stop</span></div>
+  <div id="heatMeter">
+    <div id="heatLabel">Pleasure!!!</div>
+    <div id="heatTrack" role="progressbar" aria-label="Engine heat" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+      <div id="heatFill"></div>
+    </div>
+  </div>
+  <div id="rpmMeter">
+    <div id="rpmHeader">
+      <span id="rpmLabel">RPM</span>
+      <output id="rpmReadout">0</output>
+    </div>
+    <div id="rpmTrack" role="meter" aria-label="Engine RPM" aria-valuemin="0" aria-valuemax="12000" aria-valuenow="0">
+      <div id="rpmFill"></div>
+    </div>
+    <div id="rpmScale"><span>0</span><span>12,000</span></div>
+  </div>
+
+  <div id="controls">
+    <button id="revBtn" disabled>REV</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const video = document.getElementById("bikeVideo");
+  const startBtn = document.getElementById("startBtn");
+  const startScreen = document.getElementById("startScreen");
+  const revBtn = document.getElementById("revBtn");
+  const status = document.getElementById("status");
+  const heatWarning = document.getElementById("heatWarning");
+  const heatWarningMessage = document.getElementById("heatWarningMessage");
+  const heatTrack = document.getElementById("heatTrack");
+  const heatFill = document.getElementById("heatFill");
+  const rpmTrack = document.getElementById("rpmTrack");
+  const rpmFill = document.getElementById("rpmFill");
+  const rpmReadout = document.getElementById("rpmReadout");
+
+  // Exact video segments requested by the user.
+  const START_END = 2.34;
+  const IDLE_START = 2.61;
+  const IDLE_END = 6.5;
+
+  const REV_START = 7.00;
+  const REV_HOLD_START = 7.34;
+  const REV_HOLD_END = 8.24;
+
+  const OVERHEAT_START = 8.65;
+  const OVERHEAT_LOOP_START = 17.27;
+  const OVERHEAT_END = 21.30;
+
+  const RELEASE_START = 0.99;
+  const RELEASE_END = 2.6;
+  const HEAT_DURATION_MS = 11000;
+  const HEAT_FINAL_RAMP_MS = 5000;
+  const HEAT_WARNING_THRESHOLD = 0.8;
+  const VIBRATION_INTERVAL_MS = 1000;
+  const MAX_RPM = 12000;
+  const RPM_WOBBLE_MIN = 11500;
+  const IDLE_RPM = 1000;
+
+  let mode = "ready";
+  let revHeld = false;
+  let started = false;
+  let activeSound = null;
+  let soundToken = 0;
+  let gaspStarted = false;
+  let heatStartedAt = 0;
+  let heatFrame = 0;
+  let overheated = false;
+  let currentRpm = 0;
+  let targetRpm = 0;
+  let rpmFrame = 0;
+  let revHoldStartedAt = 0;
+  let lastVibrationAt = 0;
+  let warningShakePlayed = false;
+
+  const sounds = {
+    start: new Audio("start.wav"),
+    idle: new Audio("Idle.wav"),
+    rev: new Audio("rev.wav"),
+    loop: new Audio("loop.wav"),
+    heat: new Audio("Heat.wav"),
+    gasp: new Audio("gasp.wav"),
+    release: new Audio("relese.wav")
+  };
+
+  Object.values(sounds).forEach(sound => { sound.preload = "auto"; });
+
+  function stopSound() {
+    soundToken++;
+    if (!activeSound) return;
+    activeSound.pause();
+    activeSound.currentTime = 0;
+    activeSound.onended = null;
+    activeSound = null;
+  }
+
+  function playSound(name, loop = false, onEnded = null) {
+    stopSound();
+    const sound = sounds[name];
+    const token = soundToken;
+    activeSound = sound;
+    sound.loop = loop;
+    sound.currentTime = 0;
+    sound.onended = () => {
+      if (token !== soundToken) return;
+      activeSound = null;
+      if (onEnded) onEnded();
+    };
+    const playback = sound.play();
+    if (playback && playback.catch) playback.catch(() => {});
+  }
+
+  function setTime(t) {
+    try { video.currentTime = t; } catch (e) {}
+  }
+
+  function play() {
+    const p = video.play();
+    if (p && p.catch) p.catch(() => {});
+  }
+
+  function setStatus(s) {
+    status.textContent = s;
+  }
+
+  function animateRpm(timestamp) {
+    if (mode === "rev-hold" && currentRpm >= RPM_WOBBLE_MIN) {
+      const wobble = (Math.sin((timestamp - revHoldStartedAt) / 3) + 3) / 1;
+      currentRpm = RPM_WOBBLE_MIN + wobble * (MAX_RPM - RPM_WOBBLE_MIN);
+      targetRpm = currentRpm;
+    } else {
+      currentRpm += (targetRpm - currentRpm) * 0.12;
+      if (Math.abs(targetRpm - currentRpm) < 12) currentRpm = targetRpm;
+    }
+
+    const displayedRpm = Math.round(currentRpm / 100) * 100;
+    rpmReadout.textContent = displayedRpm.toLocaleString("en-US");
+    rpmFill.style.transform = `scaleX(${currentRpm / MAX_RPM})`;
+    rpmTrack.setAttribute("aria-valuenow", String(displayedRpm));
+
+    if (mode === "rev-hold" || currentRpm !== targetRpm) {
+      rpmFrame = requestAnimationFrame(animateRpm);
+    } else {
+      rpmFrame = 0;
+    }
+  }
+
+  function setRpm(value) {
+    targetRpm = Math.max(0, Math.min(value, MAX_RPM));
+    if (!rpmFrame) rpmFrame = requestAnimationFrame(animateRpm);
+  }
+
+  function stopHeatVibration() {
+    if (typeof navigator.vibrate === "function") navigator.vibrate(0);
+    lastVibrationAt = 0;
+  }
+
+  function updateHeat() {
+    if (!revHeld || overheated) return;
+
+    const elapsedHeat = performance.now() - heatStartedAt;
+    const heat = Math.min(
+      elapsedHeat < HEAT_DURATION_MS
+        ? (elapsedHeat / HEAT_DURATION_MS) * HEAT_WARNING_THRESHOLD
+        : HEAT_WARNING_THRESHOLD + ((elapsedHeat - HEAT_DURATION_MS) / HEAT_FINAL_RAMP_MS) * (1 - HEAT_WARNING_THRESHOLD),
+      1
+    );
+    heatFill.style.transform = `scaleX(${heat})`;
+    heatTrack.setAttribute("aria-valuenow", String(Math.round(heat * 100)));
+
+    if (heat >= HEAT_WARNING_THRESHOLD) {
+      heatWarning.hidden = false;
+      if (!warningShakePlayed) {
+        warningShakePlayed = true;
+        heatWarningMessage.classList.add("shake");
+      }
+      const now = performance.now();
+      if (typeof navigator.vibrate === "function" && now - lastVibrationAt >= VIBRATION_INTERVAL_MS) {
+        navigator.vibrate([180, 120, 180]);
+        lastVibrationAt = now;
+      }
+    }
+
+    if (heat >= 1) {
+      overheat();
+    } else {
+      heatFrame = requestAnimationFrame(updateHeat);
+    }
+  }
+
+  function resetHeat() {
+    cancelAnimationFrame(heatFrame);
+    heatFrame = 0;
+    heatFill.style.transform = "scaleX(0)";
+    heatTrack.setAttribute("aria-valuenow", "0");
+    heatWarning.hidden = true;
+    warningShakePlayed = false;
+    heatWarningMessage.classList.remove("shake");
+    stopHeatVibration();
+  }
+
+  function overheat() {
+    if (overheated) return;
+    overheated = true;
+    revHeld = false;
+    mode = "overheated";
+    revBtn.disabled = true;
+    revBtn.classList.remove("pressed");
+    heatWarning.hidden = false;
+    heatWarningMessage.textContent = "You're Too Naughty Baby🫦";
+    heatWarningMessage.classList.remove("shake");
+    heatWarningMessage.classList.add("soft-shake");
+    setStatus("OVERHEATED");
+    setRpm(MAX_RPM);
+    stopHeatVibration();
+    playSound("heat");
+    mode = "overheat-start";
+    setTime(OVERHEAT_START);
+    play();
+  }
+
+  function startGame() {
+    if (started) return;
+    started = true;
+    mode = "starting";
+    window.setTimeout(() => setRpm(IDLE_RPM), 1000);
+    startScreen.style.display = "none";
+    revBtn.disabled = true;
+    setStatus("STARTING");
+    playSound("start", false, () => {
+      if (started && !revHeld) playSound("idle", true);
+    });
+    setTime(0);
+    play();
+  }
+
+  function beginRev() {
+    if (!started || mode === "starting" || overheated) return;
+    if (revHeld) return;
+
+    revHeld = true;
+    heatStartedAt = performance.now();
+    heatFrame = requestAnimationFrame(updateHeat);
+    setRpm(9000);
+    mode = "rev-start";
+    revBtn.classList.add("pressed");
+    setStatus("REV");
+    playSound("rev", false, () => {
+      if (revHeld) playSound("loop", true);
+    });
+    setTime(REV_START);
+    play();
+  }
+
+  function releaseRev() {
+    if (!revHeld || overheated) return;
+
+    revHeld = false;
+    resetHeat();
+    setRpm(IDLE_RPM);
+    revBtn.classList.remove("pressed");
+
+    // Release sound/animation: 1.00 -> 1.56
+    mode = "release";
+    setStatus("RELEASE");
+    playSound("release", false, () => {
+      if (started && !revHeld) playSound("idle", true);
+    });
+    setTime(RELEASE_START);
+    play();
+  }
+
+  startBtn.addEventListener("click", startGame);
+
+  // Pointer events work for mouse, touch and stylus.
+  revBtn.addEventListener("pointerdown", (e) => {
+    e.preventDefault();
+    try { revBtn.setPointerCapture(e.pointerId); } catch (_) {}
+    beginRev();
+  });
+
+  revBtn.addEventListener("pointerup", (e) => {
+    e.preventDefault();
+    releaseRev();
+  });
+
+  revBtn.addEventListener("pointercancel", releaseRev);
+  revBtn.addEventListener("lostpointercapture", () => {
+    if (revHeld) releaseRev();
+  });
+
+  revBtn.addEventListener("contextmenu", e => e.preventDefault());
+
+  // Main segment controller.
+  video.addEventListener("timeupdate", () => {
+    const t = video.currentTime;
+
+    if (mode === "starting") {
+      if (t >= START_END - 0.025) {
+        // Immediately enter idle loop.
+        mode = "idle";
+        setStatus("IDLE");
+        setTime(IDLE_START);
+      }
+    }
+
+    else if (mode === "idle") {
+      if (t >= IDLE_END - 0.025 || t < IDLE_START - 0.05) {
+        setTime(IDLE_START);
+      }
+    }
+
+    else if (mode === "rev-start") {
+      if (t >= REV_HOLD_START - 0.025) {
+        mode = "rev-hold";
+        revHoldStartedAt = performance.now();
+        setStatus("REV HOLD");
+        setRpm(RPM_WOBBLE_MIN);
+        if (revHeld) setTime(REV_HOLD_START);
+        else releaseRev();
+      }
+    }
+
+    else if (mode === "rev-hold") {
+      if (!revHeld) {
+        releaseRev();
+      } else if (t >= REV_HOLD_END - 0.025) {
+        // Hold loop.
+        setTime(REV_HOLD_START);
+      }
+    }
+
+    else if (mode === "release") {
+      if (t >= RELEASE_END - 0.025) {
+        // Return to idle after release.
+        mode = "idle";
+        setStatus("IDLE");
+        setTime(IDLE_START);
+        play();
+      }
+    }
+
+    else if (mode === "overheat-start") {
+      if (t >= OVERHEAT_LOOP_START - 0.025) {
+        mode = "overheat-loop";
+        setTime(OVERHEAT_LOOP_START);
+      }
+    }
+
+    else if (mode === "overheat-loop") {
+      if (t >= OVERHEAT_END - 0.025) {
+        if (!gaspStarted) {
+          gaspStarted = true;
+          playSound("gasp", true);
+        }
+        setTime(OVERHEAT_LOOP_START);
+      } else if (t < OVERHEAT_LOOP_START - 0.05) {
+        setTime(OVERHEAT_LOOP_START);
+      }
+    }
+  });
+
+  // If the browser reaches the natural end, keep the correct state alive.
+  video.addEventListener("ended", () => {
+    if (mode === "idle") {
+      setTime(IDLE_START);
+      play();
+    } else if (mode === "rev-hold" && revHeld) {
+      setTime(REV_HOLD_START);
+      play();
+    } else if (mode === "release") {
+      mode = "idle";
+      setStatus("IDLE");
+      setTime(IDLE_START);
+      play();
+    } else if (mode === "overheat-loop") {
+      if (!gaspStarted) {
+        gaspStarted = true;
+        playSound("gasp", true);
+      }
+      setTime(OVERHEAT_LOOP_START);
+      play();
+    }
+  });
+
+  // Enable REV after the video is ready.
+  video.addEventListener("loadedmetadata", () => {
+    revBtn.disabled = true;
+  });
+
+  // Once Start has been pressed, REV is enabled.
+  startBtn.addEventListener("click", () => {
+    revBtn.disabled = false;
+  });
+})();
+</script>
+</body>
+</html>
